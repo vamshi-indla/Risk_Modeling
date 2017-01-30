@@ -1,0 +1,491 @@
+---
+output: html_document
+---
+#  Credit Worthiness Scoring Model
+
+### Linkedin: [https://www.linkedin.com/in/vamshi-indla]
+## Introduction
+
+## Objective
+
+The purpose of this analysis is to demonstrate the analytical techniques to evaluate credit worthiness of an applicant.
+These techniques are applied by Major banks and Financial Institutions. I will use the Credit Approval Dataset which is a collection of credit card applications and the credit approval decisions. The data is available from the UCI Machine Learning Repository. The techniques include data visualization, logistical regression, random forest, support vector machines, boosted classification trees. 
+
+This analysis is organized as follows:
+
+-Generate several data visualizations to understand the underlying data;
+-Perform data transformations as needed;
+-Develop research questions about the data; and
+-Generate and apply the model to answer the research questions.
+
+## Executive Summary
+
+This analysis demonstrates several analytic techniques to examine one company’s decision to approve or deny credit card applications. The final model created out of this analysis is a combination of a logarithmic regression model and classification and regression tree (CART) model. This model was able to predict the outcome of a credit applications with 84% accuracy which was significantly better performance than the baseline model.
+
+Through the model we can understand that there are four factors that affect the approval decision while others have no impact. The four factors all positively affect the outcome and that as these factors increase, so does the probability that a credit card will be issued.
+The four influencing factors are:
+
+Prior default,
+Years employed,
+Credit score, and
+Income level.
+
+Other variables such as age, sex, or ethnicity did not have an influence on whether the application was denied. A Chi Squared test for independence validated our conclusion Ethnicity and Approval status are independent.
+H0: Variables are independent
+H1: Variables are dependent
+p < 0.05, reject H0, i.e Variables are dependent
+p > 0.05, accept H0, i.e Variables are independent
+Probability of 0: It indicates that both categorical variable are dependent
+Probability of 1: It shows that both variables are independent.
+
+## Exploratory Analysis and Data Transformations
+
+The first step in any analysis is to obtain the dataset and codebook. Both the dataset and the codebook can be downloaded for free from the UCI website. A quick review of the codebook shows that all of the values in the dataset have been converted to meaningless symbols to protect the confidentiality of the data. This will still suit our purposes as a demonstration dataset, since we are not using the data to develop actual credit screening criteria. However, to make it easier to work with the dataset, I gave the variables working names based on the type of data.
+
+Once the dataset is loaded, we’ll use the str() function to quickly understand the type of data in the dataset. This function only shows the first few values for each column so there may be surprises deeper in the data but it’s a good start. Here you can see the names assigned to the variables. The first 15 variables are the credit application attributes. The Approved variable is the credit approval status and target value.
+
+Using the output below, we can see that the outcome values in Approved are ‘+’ or ‘-’ for whether credit had been granted or not. These character symbols aren’t meaningful as is so will need to be transformed. Turning the ‘+’ to a ‘1’ and the ‘-’ to a ‘0’ will help with classification and logistic regression models later in the analysis
+
+
+
+```{r}
+### read comma separated file into memory
+setwd("/Users/vamshi294/Downloads/Kaggle/R_Credit_Scoring_Prototype/")
+data <- read.csv("crx.data.txt",stringsAsFactors = F)
+colnames(data)[1]<- "Male"
+colnames(data)[2]<- "Age"
+colnames(data)[3]<- "Debt"
+colnames(data)[4]<- "Married"
+colnames(data)[5]<- "Bankcustomer"
+colnames(data)[6]<- "EducationLevel"
+colnames(data)[7]<- "Ethnicity"
+colnames(data)[8]<- "YearsEmployed"
+colnames(data)[9]<- "PriorDefault"
+colnames(data)[10]<- "Employed"
+colnames(data)[11]<- "CreditScore"
+colnames(data)[12]<- "DriversLicense"
+colnames(data)[13]<- "Citizen"
+colnames(data)[14]<- "ZipCode"
+colnames(data)[15]<- "Income"
+colnames(data)[16]<- "Approved"
+
+data$Age <- as.numeric(data$Age)
+v_numeric <- names(data)[which(sapply(data, is.numeric))]
+data$Approved[data$Approved=='-'] <- 'no'
+data$Approved[data$Approved=='+'] <- 'yes'
+data$Approved <- as.factor(data$Approved)
+```
+
+ 
+### Data Transformations
+
+As previously mentioned the binary values, such as Approved, need to be converted to 1s and 0s. We’ll need to do additional transformations such as filling in missing values. That process begins by first identifying which values are missing and then determining the best way to address them. We can remove them, zero them out, or estimate a plug value. A scan through the dataset shows that missing values are labeled with ‘?’. For each variable, we’ll convert the missing values to NA which R will interpret differently than a character value.
+
+### Continuous Values (Linear Regression and Descriptive Statistics)
+
+To start with, we will use the summary() function to see the descriptive statistics of the numeric values such as min, max, mean, and median. The range is the difference between the minimum and maximum values and can be calculated from the summary() output. For the B variable, the range is 66.5 and the standard deviation is 11.9667.
+
+```{r}
+summary(data[,v_numeric])
+```
+
+### Missing Values
+
+We can see from the summary output that the Debt variable has missing values that we’ll have to fill in. We could simply use the mean of all the existing values to do so. Another method would be to check the relationship among the numeric values and use a linear regression to fill them in. The table below shows the correlation between all of the variables. The diagonal correlation values equal 1.000 because each variable is perfectly correlated with itself. To read the table, we will look at the data by rows. The largest value in the first row is 0.396 meaning age is most closely correlated with YearsEmployed. Similarly, Debt is mostly correlated with YearsEmployed.
+
+```{r}
+cor(na.omit(data[,v_numeric]))
+```
+
+We can use this information to create a linear regression model between the two variables. The model produces the two coefficients below: Intercept and YearsEmployed. These coefficients are used to predict future values. The YearsEmployed coefficients is multiplied by the value for YearsEmployed and the intercept is added.
+
+```{r}
+lm_model <- lm(Age ~ YearsEmployed, data=data[,v_numeric])
+lm_model
+```
+
+In item 83, for example, the YearsEmployed value is 3. The formula is then 3 x 1.412399 + 28.446953= 32.6841489. This method was used to estimate all 12 missing values in the Age variable.
+
+```{r}
+tempage <- predict.lm(lm_model,data=data$YearsEmployed)
+data$Age[is.na(data$Age)] <- tempage[is.na(data$Age)]
+```
+
+### Descriptive Statistics
+
+The next step of working with continuous variables is to standardize them or calculate the z-score. First, we use the mean and standard deviation calculated above. Then, subtract the mean from each value and, finally, divide by the standard deviation. The end result is the z-score. When we plot the histograms, the distribution looks the same but the z-scores are easier to work with because the values are measured in standard deviations instead of raw values. One thing to note is that the data is skewed to the right because the tail is longer.
+
+```{r}
+par(mfrow=c(1,2))
+hist(data$Age,col='red')
+hist(scale(data$Age),col='skyblue')
+data$AgeNorm <- scale(data$Age)
+```
+
+Now that we have an understanding of how this variable is distributed, we can compare the credit status by value of AgeNorm. We’ll use a boxplot showing the mean value for each group and the quartiles. We can tell from the boxplot, that the median of the two groups is slightly different with the age of approved applications being slightly closer to the mean than the denied applications. We can also see that the interquartile range is greater on the ‘Approved’ than the others. We can interpret these facts as the credit applicants with lower Age values are less likely to be granted credit, however there are several outlying applicants with high values that still were not granted credit.
+
+```{r}
+boxplot(data$AgeNorm ~ data$Approved, 
+        main="Distribution of AgeNorm by Credit Approval Status",
+        xlab="AgeNorm", ylab="Approved",horizontal=T)
+```
+
+Similar transformations on the other continuous variables are performed and then plotted them. From the boxplots, we can see the distribution is different between the variables. Income has the least amount of variance because the boxes are tightly grouped about the mean. By examining the histograms we can see that the data is skewed to the right meaning the median is less than the mean. The datasets could be good candidates for logarithmic transformation.
+
+```{r}
+data$DebtNorm <- scale(data$Debt)
+data$YearsEmployedNorm <- scale(data$YearsEmployed)
+data$CreditScoreNorm <- scale(data$CreditScore)
+data$IncomeNorm <- scale(data$Income)
+
+par(mfrow=c(2,2))
+hist(data$DebtNorm,col='skyblue')
+boxplot(data$DebtNorm ~ data$Approved, 
+        main="Distribution of DebtNorm by Credit Approval Status",
+        xlab="DebtNorm", ylab="Approved",horizontal=T)
+hist(data$YearsEmployedNorm,col='skyblue')
+boxplot(data$YearsEmployedNorm ~ data$Approved, 
+        main="Distribution of YearsEmployedNorm by Credit Approval Status",
+        xlab="YearsEmployedNorm", ylab="Approved",horizontal=T)
+
+par(mfrow=c(2,2))
+hist(data$CreditScoreNorm,col='skyblue')
+boxplot(data$CreditScoreNorm ~ data$Approved, 
+        main="Distribution of CreditScoreNorm by Credit Approval Status",
+        xlab="CreditScoreNorm", ylab="Approved",horizontal=T)
+hist(data$IncomeNorm,col='skyblue')
+boxplot(data$IncomeNorm ~ data$Approved, 
+        main="Distribution of IncomeNorm by Credit Approval Status",
+        xlab="IncomeNorm", ylab="Approved",horizontal=T)
+
+```
+
+The charts below show the continuous variables after first taking the log of each value, and then converting it to normalized value similar to above. The boxplots seem to add more informational value now because for each dataset the mean of the approved applications is further distributed from the mean of those denied. This difference will help the classifier algorithm to distinguish between the values later. We should specifically notice for the IncomeLog and CreditScoreLog variables that the applicants that did not receive credit were still heavily skewed to the right when compared to those that were granted credit. This means that a low IncomeLog or CreditScoreLog score is likely a good predictor for making the application decision. We can test this observation by using the significance in the models later.
+
+```{r}
+data$logAgeNorm <- scale(log(data$Age+1))
+data$logDebtNorm <- scale(log(data$Debt+1))
+data$logYearsEmployedNorm <- scale(log(data$YearsEmployed+1))
+data$logCreditScoreNorm <- scale(log(data$CreditScore+1))
+data$logIncomeNorm <- scale(log(data$Income+1))
+
+par(mfrow=c(2,2))
+hist(data$logDebtNorm,col='skyblue')
+boxplot(data$logDebtNorm ~ data$Approved, 
+        main="Distribution of logDebtNorm by Credit Approval Status",
+        xlab="logDebtNorm", ylab="Approved",horizontal=T)
+hist(data$logYearsEmployedNorm,col='skyblue')
+boxplot(data$logYearsEmployedNorm ~ data$Approved, 
+        main="Distribution of logYearsEmployedNorm by Credit Approval Status",
+        xlab="logYearsEmployedNorm", ylab="Approved",horizontal=T)
+par(mfrow=c(2,2))
+hist(data$logCreditScoreNorm,col='skyblue')
+boxplot(data$logCreditScoreNorm ~ data$Approved, 
+        main="Distribution of logCreditScoreNorm by Credit Approval Status",
+        xlab="logCreditScoreNorm", ylab="Approved",horizontal=T)
+hist(data$logIncomeNorm,col='skyblue')
+boxplot(data$logIncomeNorm ~ data$Approved, 
+        main="Distribution of logIncomeNorm by Credit Approval Status",
+        xlab="logIncomeNorm", ylab="Approved",horizontal=T)
+
+```
+
+### Categorical Variables (Association Rules)
+
+We will now work with categorical values in column Male. The data is distributed across factors ‘1’ and ‘0’ plus 12 of them are missing values. Again, the missing values will not work well in classifier models so we’ll need to fill in them in. The simplest way to do so is to use the most common value. For example, since the ‘0’ factor is the most common, we could replace all missing values with ‘o’.
+
+```{r}
+# Create the function.
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+# Calculate the mode using the user function.
+data$Male[data$Male=='?'] <- getmode(data$Male)
+data$Male[data$Male=='b'] <- 1
+data$Male[data$Male=='a'] <- 0
+data$Male <-as.integer(data$Male)
+
+table(data$Male)
+```
+
+
+A more complex method, and perhaps accurate method, would be to use association rules to estimate the missing values. Association rules look at the different combinations of values that each of the rows can take and then provides a method for determining the most likely or least likely state. As an example, row 248 is missing a value for the ‘Male’ column and we want to use rules to determine the most likely value it would have. We would look at the values in the other columns: Married = u, BankCustomer = g, and EducationLevel = c etcetera and then look to all of the other rows to find the combination that most clearly matches those in row 248. In set notation the rule would look like this: {u,g,c} => {1}. The apriori algorithm can be used to generate the rules or combinations and then select the best one based on a few key metrics.
+
+Support: Support is how often the left hand side of the rule occurs in the dataset. In our example above, we would count how many times {u,g,c} occurs and divide by the total number of transactions.
+
+Confidence: Confidence measures how often a rule is true. First, we find the subset of all transactions that contain {u,g,c}. Of this subset, we then count the number of transactions that match the right hand side of rule, or {1}. The confidence ratio is calculated by taking the number of times the rule is true and dividing it by the number of times the left hand side occurs.
+
+### Variable Selection
+
+Split the data into train and test.
+
+```{r}
+library(caret)
+trainIndex <- createDataPartition(data$Approved, p = .75, list=FALSE, times=1) 
+train <- data[trainIndex,]
+test <- data[-trainIndex,]
+``` 
+
+Boruta package can help in determining the important variables.
+It can be seen that variables DriversLicense, Citizenship, Gender(Male) are insignificant, and hence they are 
+excluded from predictors
+
+```{r}
+library(Boruta)
+  
+set.seed(123)
+boruta.train <- Boruta(Approved~., data = train, doTrace = 2)
+print(boruta.train)
+
+plot(boruta.train, xlab = "", xaxt = "n")
+
+lz<-lapply(1:ncol(boruta.train$ImpHistory),function(i) 
+    boruta.train$ImpHistory[is.finite(boruta.train$ImpHistory[,i]),i])
+names(lz) <- colnames(boruta.train$ImpHistory)
+Labels <- sort(sapply(lz,median))
+
+axis(side = 1,las=2,labels = names(Labels),
+       at = 1:ncol(boruta.train$ImpHistory), cex.axis = 0.7)
+
+
+final.boruta <- TentativeRoughFix(boruta.train)
+print(final.boruta)
+boruta.predictors <- getSelectedAttributes(final.boruta, withTentative = F)
+
+boruta.df <- attStats(final.boruta)
+class(boruta.df)
+print(boruta.df)
+boruta.predictors <- c(boruta.predictors,'Approved')
+train <- train[boruta.predictors]
+test <- test[boruta.predictors]
+```
+
+
+### Generate Analytic Models
+
+In order to prepare and apply a model to this dataset, we’ll first have to break it into two subsets. The first will be the training set on which we will develop the model. The second will be the test dataset which we will use to test the accuracy of our model. We will allocate 75% of the items to Training and 25% items to the Test set.
+
+Once our dataset has been split, we can establish a baseline model for predicting whether a credit application will be approved. This baseline model will be used as a benchmark to determine how effective the models are. First, we determine the percentage of credit card applications that were approved in the training set: There are 518 applications and 288 or 56% of which were denied. Since more applications were denied, our baseline model will predict that all applications were declined This simple model would be correct 56% of the time. Our models have to be more accurate than 56% to add value to the business.
+
+
+### Logistic Regression
+
+Create the Model
+Regression models are useful for predicting continuous (numeric) variables. However, the target value in Approved is binary and can only be values of 1 or 0. The applicant can either be issued a credit card or denied- they cannot receive a partial credit card. We could use linear regression to predict the approval decision using threshold and anything below assigned to 0 and anything above is assigned to 1. Unfortunately, the predicted values could be well outside of the 0 to 1 expected range. Therefore, linear or multivariate regression will not be effective for predicting the values. Instead, logistic regression will be more useful because it will produce probability that the target value is 1. Probabilities are always between 0 and 1 so the output will more closely match the target value range than linear regression.
+
+The model summary shows that the p-values for each coefficient. Alongside these coefficients, the summary gives R’s usual at-a-glance scale of asterisks for significance. Using this scale, we can see that the coefficients for AgeNorm and Debt3 are not significant. We can likely simplify the model by removing these two variables and get nearly the same accuracy.
+
+```{r}
+## Define control function to handle optional arguments for train function
+## Models to be assessed based on largest absolute area under ROC curve
+cv.ctrl <- trainControl(method = "repeatedcv", repeats = 3,
+                        summaryFunction = twoClassSummary,
+                        classProbs = TRUE)
+                        
+### Logistic (Generalized Linear Model)
+log.model.1 <- train(Approved ~ logAgeNorm + logDebtNorm + logYearsEmployedNorm + logCreditScoreNorm + logIncomeNorm,                data = train, method = "glm", metric = "ROC", trControl = cv.ctrl)
+summary(log.model.1)
+
+# Only 3 variables are significant
+log.model.2 <- train(Approved ~  logYearsEmployedNorm + logCreditScoreNorm + logIncomeNorm ,
+    data = train, method = "glm", metric = "ROC", trControl = cv.ctrl)
+summary(log.model.2)
+
+```
+
+Stepwise Regression, StepAIC, and our gutt says to go ahead with these 3 variables
+- logYearsEmployedNorm 
+- logCreditScoreNorm  
+- logIncomeNorm
+
+```{r}
+### Ada Boost - Boosted Classification Trees
+
+ada.grid <- expand.grid(.iter = c(50, 100),
+                        .maxdepth = c(4, 8),
+                        .nu = c(0.1, 1))
+                        
+set.seed(35)
+ada.tune <- train(Approved ~ logYearsEmployedNorm + logCreditScoreNorm + logIncomeNorm, 
+                  data = train ,
+                  method = "ada",
+                  metric = "ROC",
+                  tuneGrid = ada.grid,
+                  trControl = cv.ctrl)
+ada.tune
+
+### Random Forest
+rf.grid <- data.frame(.mtry = c(2, 3))
+set.seed(35)
+library(randomForest)
+rf.tune <- train(Approved ~ logYearsEmployedNorm + logCreditScoreNorm + logIncomeNorm, 
+                data = train , 
+                 method = "rf",
+                 metric = "ROC",
+                 tuneGrid = rf.grid,
+                 trControl = cv.ctrl)
+rf.tune
+
+### Support Vector Machine  
+set.seed(35)
+svm.tune <- train(Approved ~ logYearsEmployedNorm + logCreditScoreNorm + logIncomeNorm, 
+                  data = train ,
+                  method = "svmRadial",
+                  tuneLength = 9,
+                  preProcess = c("center", "scale"),
+                  metric = "ROC",
+                  trControl = cv.ctrl)
+svm.tune
+
+```
+
+### Model Evaluation
+
+With all four models in hand, I can begin to evaluate their performance by whipping together some cross-tabulations of the observed and predicted Approved for the passengers in the train data. caret makes this easy with the confusionMatrix function.
+
+### Logistic regression model
+
+```{r}
+library(e1071)
+log.pred <- predict(log.model.2, train)
+confusionMatrix(log.pred, train$Approved)
+
+# #install.packages("ROCR"); 
+# library(ROCR)
+# 
+# #Prediction function
+# ROCRpred = prediction(predictTrain, qualityTrain$PoorCare)
+# 
+# # Performance function
+# ROCRperf = performance(ROCRpred, "tpr", "fpr") #This defines what we want to plot on x & y axis
+# 
+# # Plot ROC curve
+# plot(ROCRperf)
+```
+
+> Accuracy - 77%
+
+Let's ask some business questions
+1. What is the Sensitivity and Specificity of this model?
+
+Sensitivity = How true, the model can predict out of the original true cases.
+Sensitivity = tp/ (tp + fn) = 244 / (244+44) = 0.847
+
+Specificity = How false, the model can predict out of the original false cases.
+Sensitivity = tn/ (tn + fp) = 154 / (76+154) =  0.667
+
+
+```{r}
+### ada regression model
+
+ada.pred <- predict(ada.tune, train)
+confusionMatrix(ada.pred, train$Approved)
+```
+
+> Accuracy - 84%
+
+```{r}
+### randomForest regression model
+
+rf.pred <- predict(rf.tune, train)
+confusionMatrix(rf.pred, train$Approved)
+```
+
+> Accuracy - 92%
+
+### SVM  model
+
+```{r}
+svm.pred <- predict(svm.tune, train)
+confusionMatrix(svm.pred, train$Approved)
+```
+
+> Accuracy - 80%
+
+
+## Plot ROC Curves
+
+```{r}
+### Logistic regression model (BLACK curve)
+library(pROC)
+log.probs <- predict(log.model.2, train, type = "prob")
+log.ROC <- roc(response = train$Approved,
+                predictor = log.probs$yes,
+                levels = levels(train$Approved))
+plot(log.ROC, col="black")
+
+### Area under the curve: 0.83 
+
+### Boosted model (GREEN curve)
+
+ada.probs <- predict(ada.tune, train, type = "prob")
+ada.ROC <- roc(response = train$Approved,
+            predictor = ada.probs$yes,
+            levels = levels(train$Approved))
+plot(ada.ROC, add=TRUE, col="green")    
+
+### Area under the curve: 0.91
+
+### Random Forest model (RED curve)
+rf.probs <- predict(rf.tune, train, type = "prob")
+rf.ROC <- roc(response = train$Approved,
+           predictor = rf.probs$yes,
+           levels = levels(train$Approved))
+plot(rf.ROC, add=TRUE, col="red",main = 'RF') 
+
+## Area under the curve: 0.94
+
+### SVM model (BLUE curve)
+svm.probs <- predict(svm.tune, train, type = "prob")
+svm.ROC <- roc(response = train$Approved,
+            predictor = svm.probs$yes,
+            levels = levels(train$Approved))
+plot(svm.ROC, add=TRUE, col="blue")
+
+## Area under the curve: 0.86
+```
+
+The following R script uses caret function resamples to collect the resampling results, then calls the dotplot function to create a visualization of the resampling distributions. I'm typically not one for leaning on a single metric for important decisions, but if you have been looking for that one graph which sums up the performance of the four models, this is it.
+
+```{r}
+cv.values <- resamples(list(Logit = log.model.2, Ada = ada.tune, 
+                            RF = rf.tune, SVM = svm.tune))
+dotplot(cv.values, metric = "ROC")
+```
+
+The next graph compares the four models on the basis of ROC, sensitivity, and specificity. Here, sensitivity (“Sens” on the graph) is the probability that a model will predict a Application Decline, given that the application actually got declined. Think of sensitivity in this case as the true declined rate. Specificity (“Spec”), on the other hand, is the probability that a model will predict approval, given that the  application actually got approved. Simply put, all four models were better at predicting application declines than approvals, and none of them are significantly better or worse than the other three. Of the four, if I had to pick one, I'd probably put my money on the logistic regression model. 
+
+```{r}
+dotplot(cv.values, metric = c("ROC","Sens","Spec"))
+```
+
+=========
+## Predict the Validation Test
+The confusion matrix from this revised model is very close to the earlier version. The model has correctly predicted 387 items which is only 12 fewer than before. The accuracy is comparable – 75% vs. 77% – and the model is simpler.
+
+```{r}
+#trainapproved <- predict(log.model.2,test[,-16],type="response")
+test.pred <- predict(log.model.2, test)
+confusionMatrix(test.pred, test$Approved)
+
+# free up some memory
+gc(verbose = TRUE)
+ls(all = TRUE)
+rm(list = ls(all = TRUE)) 
+ls(all = TRUE)
+gc(verbose = TRUE)
+
+```
+
+Conclusion:
+For better intepretation, Logistic regression was preferred.
+
+### References: 
+
+1. /ml/machine-learning-databases/credit-screening
+2. http://www.rpubs.com/kuhnrl30/CreditScreen
+3. https://cran.r-project.org/doc/contrib/Sharma-CreditScoring.pdf
+4. Data: http://ocw.mit.edu/NR/rdonlyres/Sloan-School-of-Management/15-062DataMiningSpring2003/94F99F14-189D-4FBA-91A8-D648D1867149/0/GermanCredit.pdf
+5. https://github.com/wehrley/wehrley.github.io/blob/master/SOUPTONUTS.md
